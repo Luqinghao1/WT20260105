@@ -16,53 +16,58 @@
   <property name="styleSheet">
    <string notr="true">
     /* 全局设置：浅色背景，黑色字体 */
-    QWidget { background-color: #f5f6fa; font-family: &quot;Microsoft YaHei&quot;, Arial; color: #000000; }
+    QWidget { background-color: #f5f6fa;
+font-family: &quot;Microsoft YaHei&quot;, Arial; color: #000000; }
 
     /* 按钮设置 */
     QPushButton {
         background-color: #4a90e2;
-        color: white;
+color: white;
         border-radius: 4px;
         padding: 6px 12px;
         border: none;
         font-weight: bold;
     }
-    QPushButton:hover { background-color: #357abd; }
-    QPushButton:disabled { background-color: #cccccc; color: #666666; }
+    QPushButton:hover { background-color: #357abd;
+}
+    QPushButton:disabled { background-color: #cccccc; color: #666666;
+}
 
     /* 输入框设置 */
     QLineEdit {
         background-color: white;
-        border: 1px solid #ccc;
+border: 1px solid #ccc;
         border-radius: 4px;
         padding: 4px;
         color: black;
-    }
+}
 
     /* 表格设置 */
     QTableView {
         background-color: white;
-        border: 1px solid #ddd;
+border: 1px solid #ddd;
         gridline-color: #eee;
         color: black;
         selection-background-color: #e0f0ff;
         selection-color: black;
-    }
+}
     QHeaderView::section {
         background-color: #f8f9fa;
         border: none;
-        border-bottom: 1px solid #ddd;
+border-bottom: 1px solid #ddd;
         border-right: 1px solid #ddd;
         padding: 4px;
         color: #000000;
         font-weight: bold;
-    }
+}
 
     /* 标签设置 */
-    QLabel { color: #000000; background: transparent; }
+    QLabel { color: #000000; background: transparent;
+}
 
     /* 分隔线设置 */
-    Line { background-color: #ccc; }
+    Line { background-color: #ccc;
+}
    </string>
   </property>
   <layout class="QVBoxLayout" name="mainLayout">
@@ -116,6 +121,16 @@
       <widget class="QPushButton" name="btnPressureDropCalc">
        <property name="text">
         <string>📉 压降计算</string>
+       </property>
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="btnCalcPwf">
+       <property name="text">
+        <string>🌊 流压计算</string>
        </property>
        <property name="enabled">
         <bool>false</bool>

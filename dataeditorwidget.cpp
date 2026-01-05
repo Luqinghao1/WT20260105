@@ -106,6 +106,8 @@ void DataEditorWidget::setupConnections()
     connect(ui->btnDefineColumns, &QPushButton::clicked, this, &DataEditorWidget::onDefineColumns);
     connect(ui->btnTimeConvert, &QPushButton::clicked, this, &DataEditorWidget::onTimeConvert);
     connect(ui->btnPressureDropCalc, &QPushButton::clicked, this, &DataEditorWidget::onPressureDropCalc);
+    // 连接流压计算按钮信号
+    connect(ui->btnCalcPwf, &QPushButton::clicked, this, &DataEditorWidget::onCalcPwf);
     connect(ui->searchLineEdit, &QLineEdit::textChanged, this, &DataEditorWidget::onSearchTextChanged);
     connect(ui->dataTableView, &QTableView::customContextMenuRequested, this, &DataEditorWidget::onCustomContextMenu);
     connect(m_dataModel, &QStandardItemModel::itemChanged, this, &DataEditorWidget::onModelDataChanged);
@@ -118,6 +120,7 @@ void DataEditorWidget::updateButtonsState()
     ui->btnDefineColumns->setEnabled(hasData);
     ui->btnTimeConvert->setEnabled(hasData);
     ui->btnPressureDropCalc->setEnabled(hasData);
+    ui->btnCalcPwf->setEnabled(hasData); // 启用流压计算按钮
 }
 
 // ============================================================================
@@ -208,7 +211,6 @@ bool DataEditorWidget::loadFileWithConfig(const DataImportSettings& settings)
 
     // ================= Excel 加载逻辑 =================
     if (settings.isExcel) {
-        // [修复] 将 headerProcessed 声明在 if 块的最顶层，确保后续逻辑可见
         bool headerProcessed = false;
 
         QAxObject excel("Excel.Application");
@@ -521,6 +523,30 @@ void DataEditorWidget::onPressureDropCalc()
 
     if (res.success) QMessageBox::information(this, "成功", "压降计算完成");
     else QMessageBox::warning(this, "失败", res.errorMessage);
+}
+
+// 井底流压计算功能入口
+void DataEditorWidget::onCalcPwf()
+{
+    DataCalculate calculator;
+    QStringList headers;
+    for(int i=0; i<m_dataModel->columnCount(); ++i)
+        headers << m_dataModel->headerData(i, Qt::Horizontal).toString();
+
+    // 弹出配置对话框
+    PwfCalculationDialog dlg(headers, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        PwfCalculationConfig config = dlg.getConfig();
+        // 执行计算
+        PwfCalculationResult res = calculator.calculateBottomHolePressure(m_dataModel, m_columnDefinitions, config);
+
+        if (res.success) {
+            QMessageBox::information(this, "成功", "井底流压计算完成，已添加新列。");
+            emit dataChanged();
+        } else {
+            QMessageBox::warning(this, "计算失败", res.errorMessage);
+        }
+    }
 }
 
 // ============================================================================

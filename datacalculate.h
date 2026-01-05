@@ -3,8 +3,9 @@
  * 文件作用: 数据计算处理类头文件
  * 功能描述:
  * 1. 包含时间转换的配置对话框类 TimeConversionDialog。
- * 2. 提供 DataCalculate 类，用于执行时间格式转换和压降计算逻辑。
- * 3. 所有的计算操作都直接修改传入的 QStandardItemModel。
+ * 2. 包含井底流压计算配置对话框类 PwfCalculationDialog (新增)。
+ * 3. 提供 DataCalculate 类，用于执行时间格式转换、压降计算和井底流压计算逻辑。
+ * 4. 所有的计算操作都直接修改传入的 QStandardItemModel。
  */
 
 #ifndef DATACALCULATE_H
@@ -17,6 +18,8 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QDoubleSpinBox>
+#include <QSpinBox>
 #include "dataeditorwidget.h" // 获取相关结构体定义
 
 // 时间转换配置结构体
@@ -45,6 +48,24 @@ struct TimeConversionResult {
     int addedColumnIndex;
     QString columnName;
     int processedRows;
+};
+
+// 井底流压计算参数配置结构体
+struct PwfCalculationConfig {
+    double Hres;         // 油层中部深度 (m)
+    double gamma_o;      // 油比重 (g/cm³)
+    double gamma_w;      // 水比重 (g/cm³)
+    double f_w;          // 质量含水率 (%)
+    int pcColumnIndex;   // 套压列索引
+    int lwfColumnIndex;  // 动液面列索引
+    int decimalPlaces;   // 保留小数位数 (新增)
+};
+
+// 井底流压计算结果结构体
+struct PwfCalculationResult {
+    bool success;
+    QString errorMessage;
+    int addedColumnIndex;
 };
 
 // ============================================================================
@@ -79,6 +100,27 @@ private:
 };
 
 // ============================================================================
+// 井底流压计算参数设置对话框类
+// ============================================================================
+class PwfCalculationDialog : public QDialog
+{
+    Q_OBJECT
+public:
+    explicit PwfCalculationDialog(const QStringList& columnNames, QWidget* parent = nullptr);
+    PwfCalculationConfig getConfig() const;
+
+private:
+    QStringList m_columnNames;
+    QDoubleSpinBox* m_spinHres;    // 油层中部深度
+    QDoubleSpinBox* m_spinGammaO;  // 油比重
+    QDoubleSpinBox* m_spinGammaW;  // 水比重
+    QDoubleSpinBox* m_spinFw;      // 含水率
+    QComboBox* m_comboPc;          // 套压列选择
+    QComboBox* m_comboLwf;         // 动液面列选择
+    QSpinBox* m_spinDecimal;       // 小数位数选择 (新增)
+};
+
+// ============================================================================
 // 数据计算逻辑处理类
 // ============================================================================
 class DataCalculate : public QObject
@@ -95,6 +137,11 @@ public:
     // 执行压降计算逻辑
     PressureDropResult calculatePressureDrop(QStandardItemModel* model,
                                              QList<ColumnDefinition>& definitions);
+
+    // 执行井底流压计算逻辑
+    PwfCalculationResult calculateBottomHolePressure(QStandardItemModel* model,
+                                                     QList<ColumnDefinition>& definitions,
+                                                     const PwfCalculationConfig& config);
 
 private:
     // 辅助函数：时间解析

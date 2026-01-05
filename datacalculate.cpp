@@ -5,6 +5,7 @@
  * 1. 实现时间转换弹窗的UI构建和交互。
  * 2. 实现核心的时间数据解析和转换算法。
  * 3. 实现基于压力列的压降计算算法。
+ * 4. 实现井底流压计算弹窗及核心算法 (基于 MATLAB 逻辑)。
  */
 
 #include "datacalculate.h"
@@ -15,6 +16,7 @@
 #include <QPushButton>
 #include <QDebug>
 #include <QDateTime>
+#include <cmath>
 
 // ============================================================================
 // TimeConversionDialog 实现
@@ -126,7 +128,6 @@ void TimeConversionDialog::onPreviewClicked()
     QString unit = m_outputUnitCombo->currentText();
     QString preview;
 
-    // 修复字符串拼接错误：使用 QString() 包裹中文字符串字面量
     if (m_dateTimeRadio->isChecked()) {
         QString val = (unit=="h" ? "1.000" : (unit=="min" ? "60.000" : "3600.000"));
         preview = QString("示例: 2025-01-01 10:00:00 -> 0 ") + unit + QString("\n");
@@ -148,6 +149,128 @@ TimeConversionConfig TimeConversionDialog::getConversionConfig() const
     c.sourceTimeColumnIndex = m_sourceColumnCombo->currentIndex();
     c.newColumnName = m_newColumnNameEdit->text();
     c.outputUnit = m_outputUnitCombo->currentText();
+    return c;
+}
+
+// ============================================================================
+// PwfCalculationDialog 实现
+// ============================================================================
+
+PwfCalculationDialog::PwfCalculationDialog(const QStringList& columnNames, QWidget* parent)
+    : QDialog(parent), m_columnNames(columnNames)
+{
+    setWindowTitle("井底流压计算");
+    resize(400, 480); // 稍微增加高度以容纳新选项
+    setStyleSheet("QDialog { background-color: white; color: black; font-family: \"Microsoft YaHei\", Arial; } "
+                  "QLabel { color: black; background: transparent; font-weight: normal;} "
+                  "QGroupBox { color: black; border: 1px solid #ccc; margin-top: 10px; font-weight: bold; } "
+                  "QDoubleSpinBox { background-color: white; border: 1px solid #ccc; padding: 2px; } "
+                  "QSpinBox { background-color: white; border: 1px solid #ccc; padding: 2px; } "
+                  "QComboBox { background-color: white; border: 1px solid #ccc; padding: 2px; } "
+                  "QPushButton { color: white; background-color: #4a90e2; border: none; border-radius: 4px; padding: 6px 12px; } "
+                  "QPushButton:hover { background-color: #357abd; }");
+
+    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+
+    // 参数输入组
+    QGroupBox* paramGroup = new QGroupBox("油藏与流体参数");
+    QFormLayout* formParam = new QFormLayout(paramGroup);
+
+    m_spinHres = new QDoubleSpinBox;
+    m_spinHres->setRange(0, 10000);
+    m_spinHres->setDecimals(2);
+    m_spinHres->setValue(1822.0); // 默认值参考
+    m_spinHres->setSuffix(" m");
+
+    m_spinGammaO = new QDoubleSpinBox;
+    m_spinGammaO->setRange(0.01, 2.0);
+    m_spinGammaO->setDecimals(4);
+    m_spinGammaO->setValue(0.845); // 默认值参考
+    m_spinGammaO->setSuffix(" g/cm³");
+
+    m_spinGammaW = new QDoubleSpinBox;
+    m_spinGammaW->setRange(0.01, 2.0);
+    m_spinGammaW->setDecimals(4);
+    m_spinGammaW->setValue(1.0); // 默认值参考
+    m_spinGammaW->setSuffix(" g/cm³");
+
+    m_spinFw = new QDoubleSpinBox;
+    m_spinFw->setRange(0, 100);
+    m_spinFw->setDecimals(2);
+    m_spinFw->setValue(8.0); // 默认值参考
+    m_spinFw->setSuffix(" %");
+
+    formParam->addRow("油层中部深度 (Hres):", m_spinHres);
+    formParam->addRow("油比重 (gamma_o):", m_spinGammaO);
+    formParam->addRow("水比重 (gamma_w):", m_spinGammaW);
+    formParam->addRow("质量含水率 (f_w):", m_spinFw);
+    mainLayout->addWidget(paramGroup);
+
+    // 列选择组
+    QGroupBox* colGroup = new QGroupBox("数据列选择");
+    QFormLayout* formCol = new QFormLayout(colGroup);
+
+    m_comboPc = new QComboBox;
+    m_comboPc->addItems(m_columnNames);
+    // 尝试自动匹配套压列
+    for(int i=0; i<m_columnNames.size(); ++i) {
+        if(m_columnNames[i].contains("套压") || m_columnNames[i].contains("Pc", Qt::CaseInsensitive)) {
+            m_comboPc->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    m_comboLwf = new QComboBox;
+    m_comboLwf->addItems(m_columnNames);
+    // 尝试自动匹配动液面列
+    for(int i=0; i<m_columnNames.size(); ++i) {
+        if(m_columnNames[i].contains("动液面") || m_columnNames[i].contains("Lwf", Qt::CaseInsensitive) || m_columnNames[i].contains("液面")) {
+            m_comboLwf->setCurrentIndex(i);
+            break;
+        }
+    }
+
+    formCol->addRow("套压列 (Pc):", m_comboPc);
+    formCol->addRow("动液面列 (Lwf):", m_comboLwf);
+    mainLayout->addWidget(colGroup);
+
+    // 结果设置组
+    QGroupBox* resGroup = new QGroupBox("结果设置");
+    QFormLayout* formRes = new QFormLayout(resGroup);
+    m_spinDecimal = new QSpinBox;
+    m_spinDecimal->setRange(0, 10);
+    m_spinDecimal->setValue(3); // 默认保留3位小数
+    m_spinDecimal->setSuffix(" 位");
+
+    formRes->addRow("保留小数位数:", m_spinDecimal);
+    mainLayout->addWidget(resGroup);
+
+    // 底部按钮
+    QHBoxLayout* btnLayout = new QHBoxLayout;
+    btnLayout->addStretch();
+    QPushButton* btnOk = new QPushButton("计算");
+    QPushButton* btnCancel = new QPushButton("取消");
+    btnOk->setStyleSheet("background-color: #28a745; color: white;");
+    btnCancel->setStyleSheet("background-color: #6c757d; color: white;");
+
+    connect(btnOk, &QPushButton::clicked, this, &QDialog::accept);
+    connect(btnCancel, &QPushButton::clicked, this, &QDialog::reject);
+
+    btnLayout->addWidget(btnOk);
+    btnLayout->addWidget(btnCancel);
+    mainLayout->addLayout(btnLayout);
+}
+
+PwfCalculationConfig PwfCalculationDialog::getConfig() const
+{
+    PwfCalculationConfig c;
+    c.Hres = m_spinHres->value();
+    c.gamma_o = m_spinGammaO->value();
+    c.gamma_w = m_spinGammaW->value();
+    c.f_w = m_spinFw->value();
+    c.pcColumnIndex = m_comboPc->currentIndex();
+    c.lwfColumnIndex = m_comboLwf->currentIndex();
+    c.decimalPlaces = m_spinDecimal->value(); // 获取用户选择的小数位数
     return c;
 }
 
@@ -295,6 +418,98 @@ PressureDropResult DataCalculate::calculatePressureDrop(QStandardItemModel* mode
     return result;
 }
 
+// 井底流压计算逻辑实现
+PwfCalculationResult DataCalculate::calculateBottomHolePressure(QStandardItemModel* model,
+                                                                QList<ColumnDefinition>& definitions,
+                                                                const PwfCalculationConfig& config)
+{
+    PwfCalculationResult result;
+    result.success = false;
+
+    // 1. 参数校验
+    if (!model || model->rowCount() == 0) {
+        result.errorMessage = "数据表为空。";
+        return result;
+    }
+    if (config.gamma_o <= 0 || config.gamma_w <= 0) {
+        result.errorMessage = "油/水比重必须大于0。";
+        return result;
+    }
+    if (config.gamma_o >= config.gamma_w) {
+        result.errorMessage = "油比重必须小于水比重。";
+        return result;
+    }
+    if (config.Hres <= 0) {
+        result.errorMessage = "油层中部深度必须大于0。";
+        return result;
+    }
+    if (config.pcColumnIndex < 0 || config.pcColumnIndex >= model->columnCount() ||
+        config.lwfColumnIndex < 0 || config.lwfColumnIndex >= model->columnCount()) {
+        result.errorMessage = "选择的列索引无效。";
+        return result;
+    }
+
+    // 2. 计算混合液比重
+    double f_w_decimal = config.f_w / 100.0;
+    // 公式：gamma_mix = 1 / [(1 - f_w)/gamma_o + f_w/gamma_w]
+    double gamma_mix = 1.0 / ((1.0 - f_w_decimal) / config.gamma_o + f_w_decimal / config.gamma_w);
+
+    // 3. 准备新列
+    int newColIdx = model->columnCount();
+    model->insertColumn(newColIdx);
+
+    // 获取套压的单位作为流压单位，默认为 MPa
+    QString unit = "MPa";
+    if (config.pcColumnIndex < definitions.size() && !definitions[config.pcColumnIndex].unit.isEmpty()) {
+        unit = definitions[config.pcColumnIndex].unit;
+    }
+
+    ColumnDefinition newDef;
+    newDef.name = "井底流压\\" + unit;
+    newDef.type = WellTestColumnType::BottomHolePressure;
+    newDef.unit = unit;
+    newDef.decimalPlaces = config.decimalPlaces; // 使用用户选择的小数位数
+    definitions.append(newDef);
+
+    model->setHorizontalHeaderItem(newColIdx, new QStandardItem(newDef.name));
+
+    // 4. 逐行计算
+    int errorCount = 0;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        QString pcStr = model->item(i, config.pcColumnIndex)->text();
+        QString lwfStr = model->item(i, config.lwfColumnIndex)->text();
+
+        bool pcOk, lwfOk;
+        double Pc = pcStr.toDouble(&pcOk);
+        double Lwf = lwfStr.toDouble(&lwfOk);
+
+        if (pcOk && lwfOk) {
+            // 物理约束检查
+            if (Lwf >= config.Hres) {
+                // 动液面深度大于等于油层深度，物理上不合理，无法计算有效液柱
+                model->setItem(i, newColIdx, new QStandardItem("Error: Lwf >= Hres"));
+                errorCount++;
+            } else {
+                // 公式：Pwf = Pc + (Hres - Lwf) * gamma_mix / 100
+                // 注：除以100是将 g/cm³ * m 转换为 MPa (近似工程单位换算)
+                double Pwf = Pc + (config.Hres - Lwf) * gamma_mix / 100.0;
+                // 使用用户指定的小数位数进行格式化
+                model->setItem(i, newColIdx, new QStandardItem(QString::number(Pwf, 'f', config.decimalPlaces)));
+            }
+        } else {
+            model->setItem(i, newColIdx, new QStandardItem(""));
+        }
+    }
+
+    if (errorCount > 0) {
+        result.errorMessage = QString("计算完成，但有 %1 行数据因动液面深度大于油层深度而无法计算。").arg(errorCount);
+    }
+
+    result.success = true; // 即使部分行计算失败，整体流程算成功
+    result.addedColumnIndex = newColIdx;
+    return result;
+}
+
 // 辅助函数实现
 QTime DataCalculate::parseTimeString(const QString& timeStr) const {
     QStringList fmts = {"hh:mm:ss", "h:mm:ss", "hh:mm"};
@@ -335,3 +550,4 @@ int DataCalculate::findPressureColumn(QStandardItemModel* model, const QList<Col
     }
     return -1;
 }
+

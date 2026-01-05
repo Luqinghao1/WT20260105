@@ -64,10 +64,15 @@ void DataColumnDialog::setupColumnRows()
     layout->setSpacing(10);
     layout->setContentsMargins(10, 10, 10, 10);
 
+    // 新增了 "套压" 和 "流压"
     QStringList typeNames = {
-        "序号", "日期", "时刻", "时间", "压力", "温度", "流量", "深度", "粘度", "密度",
+        "序号", "日期", "时刻", "时间", "压力", "套压", "流压",
+        "温度", "流量", "深度", "粘度", "密度",
         "渗透率", "孔隙度", "井半径", "表皮系数", "距离", "体积", "压降", "自定义"
     };
+
+    // 自定义类型的索引，根据上面的列表长度变化，需重新计算，现在是列表最后一个索引 19
+    int customTypeIndex = typeNames.size() - 1;
 
     for (int i = 0; i < m_columnNames.size(); ++i) {
         QWidget* rowWidget = new QWidget;
@@ -90,14 +95,14 @@ void DataColumnDialog::setupColumnRows()
                 typeCombo->setEditable(true);
                 QString customName = m_definitions[i].name.split('\\').first();
                 if (!customName.isEmpty() && customName != "自定义") {
-                    typeCombo->setItemText(17, customName);
-                    typeCombo->setCurrentIndex(17);
+                    typeCombo->setItemText(customTypeIndex, customName);
+                    typeCombo->setCurrentIndex(customTypeIndex);
                 }
             } else {
                 typeCombo->setEditable(false);
             }
         } else {
-            typeCombo->setCurrentIndex(17);
+            typeCombo->setCurrentIndex(customTypeIndex);
             typeCombo->setEditable(true);
         }
 
@@ -150,9 +155,13 @@ void DataColumnDialog::onTypeChanged(int index)
     QComboBox* senderCombo = qobject_cast<QComboBox*>(sender());
     if (!senderCombo) return;
     int rowIdx = m_typeComboBoxes.indexOf(senderCombo);
+
+    // 自定义类型的索引为 19
+    int customTypeIndex = 19;
+
     if (rowIdx != -1) {
         WellTestColumnType type = static_cast<WellTestColumnType>(index);
-        bool isCustomType = (index == 17);
+        bool isCustomType = (index == customTypeIndex);
         senderCombo->setEditable(isCustomType);
         updateUnitsForType(type, m_unitComboBoxes[rowIdx]);
         updatePreviewLabel(rowIdx);
@@ -198,8 +207,13 @@ void DataColumnDialog::updateUnitsForType(WellTestColumnType type, QComboBox* un
     case WellTestColumnType::Date: unitCombo->addItems({"-", "yyyy-MM-dd", "yyyy/MM/dd", "自定义"}); break;
     case WellTestColumnType::TimeOfDay: unitCombo->addItems({"-", "hh:mm:ss", "hh:mm", "自定义"}); break;
     case WellTestColumnType::Time: unitCombo->addItems({"h", "min", "s", "day", "自定义"}); break;
+
+    // 压力、套压、流压、压降共享相同的单位列表
     case WellTestColumnType::Pressure:
+    case WellTestColumnType::CasingPressure:
+    case WellTestColumnType::BottomHolePressure:
     case WellTestColumnType::PressureDrop: unitCombo->addItems({"MPa", "kPa", "Pa", "psi", "bar", "atm", "自定义"}); break;
+
     case WellTestColumnType::Temperature: unitCombo->addItems({"°C", "°F", "K", "自定义"}); break;
     case WellTestColumnType::FlowRate: unitCombo->addItems({"m³/d", "m³/h", "L/s", "bbl/d", "自定义"}); break;
     case WellTestColumnType::Depth:
@@ -229,15 +243,21 @@ void DataColumnDialog::updatePreviewLabel(int index)
 
 void DataColumnDialog::onLoadPresetClicked()
 {
+    // 自定义索引需更新
+    int customIdx = 19;
+
     for (int i = 0; i < m_columnNames.size(); ++i) {
         QString name = m_columnNames[i].toLower();
-        int typeIdx = 17; QString unitToSel = "-";
+        int typeIdx = customIdx; QString unitToSel = "-";
+
         if (name.contains("序号") || name == "no") { typeIdx = 0; }
         else if (name.contains("日期")) { typeIdx = 1; unitToSel = "yyyy-MM-dd"; }
         else if (name.contains("时刻")) { typeIdx = 2; unitToSel = "hh:mm:ss"; }
         else if (name.contains("时间")) { typeIdx = 3; unitToSel = "h"; }
         else if (name.contains("压力")) { typeIdx = 4; unitToSel = "MPa"; }
-        else if (name.contains("流量")) { typeIdx = 6; unitToSel = "m³/d"; }
+        else if (name.contains("流量")) { typeIdx = 8; unitToSel = "m³/d"; } // FlowRate 现在索引是 8
+        else if (name.contains("套压")) { typeIdx = 5; unitToSel = "MPa"; } // CasingPressure 索引 5
+        else if (name.contains("流压")) { typeIdx = 6; unitToSel = "MPa"; } // BottomHolePressure 索引 6
 
         m_typeComboBoxes[i]->setCurrentIndex(typeIdx);
         updateUnitsForType(static_cast<WellTestColumnType>(typeIdx), m_unitComboBoxes[i]);
@@ -248,8 +268,9 @@ void DataColumnDialog::onLoadPresetClicked()
 
 void DataColumnDialog::onResetClicked()
 {
+    int customIdx = 19;
     for (int i = 0; i < m_typeComboBoxes.size(); ++i) {
-        m_typeComboBoxes[i]->setCurrentIndex(17);
+        m_typeComboBoxes[i]->setCurrentIndex(customIdx);
         m_typeComboBoxes[i]->setEditable(true);
         m_requiredChecks[i]->setChecked(false);
     }

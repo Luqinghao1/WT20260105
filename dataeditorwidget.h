@@ -22,9 +22,10 @@
 #include "dataimportdialog.h" // 引用导入配置对话框头文件
 
 // 定义列的枚举类型，表示每一列数据的物理含义
+// 新增了 CasingPressure (套压) 和 BottomHolePressure (流压)
 enum class WellTestColumnType {
-    SerialNumber, Date, Time, TimeOfDay, Pressure, Temperature, FlowRate,
-    Depth, Viscosity, Density, Permeability, Porosity, WellRadius,
+    SerialNumber, Date, Time, TimeOfDay, Pressure, CasingPressure, BottomHolePressure,
+    Temperature, FlowRate, Depth, Viscosity, Density, Permeability, Porosity, WellRadius,
     SkinFactor, Distance, Volume, PressureDrop, Custom
 };
 
@@ -108,6 +109,8 @@ private slots:
     void onTimeConvert();
     // 压降计算按钮点击槽函数
     void onPressureDropCalc();
+    // 井底流压计算按钮点击槽函数
+    void onCalcPwf();
 
     // 搜索框文本变化时的槽函数（带防抖）
     void onSearchTextChanged();
